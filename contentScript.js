@@ -144,9 +144,24 @@ function handleKeyDown(e) {
   } else if (e.key === 'Escape') {
     hideSuggestions();
   } else if (e.key === ' ' || e.code === 'Space') {
-    // Space bar: insert suggestion and a space
+    // Space bar: insert suggestion and a space, then allow user to keep typing
     e.preventDefault();
     insertSuggestion(currentSuggestions[highlightedIndex], true);
+    // For contenteditable, ensure a space is inserted at the caret if not already present
+    if (currentInput && currentInput.isContentEditable) {
+      const selection = window.getSelection();
+      if (selection.rangeCount) {
+        const range = selection.getRangeAt(0);
+        // Insert a space node if not already present
+        const node = document.createTextNode(' ');
+        range.insertNode(node);
+        // Move caret after the space
+        range.setStartAfter(node);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    }
   }
 }
 
@@ -157,33 +172,97 @@ function hideSuggestions() {
   currentSuggestions = [];
 }
 
+// Helper: get caret coordinates in a contenteditable element
+function getCaretCoordinates(editableDiv) {
+  let x = 0, y = 0;
+  const selection = window.getSelection();
+  if (selection.rangeCount === 0) return { x, y };
+  const range = selection.getRangeAt(0).cloneRange();
+  range.collapse(true);
+  const rects = range.getClientRects();
+  if (rects.length > 0) {
+    const rect = rects[0];
+    x = rect.left + window.scrollX;
+    y = rect.bottom + window.scrollY;
+  } else if (editableDiv.getBoundingClientRect) {
+    const rect = editableDiv.getBoundingClientRect();
+    x = rect.left + window.scrollX;
+    y = rect.top + window.scrollY;
+  }
+  return { x, y };
+}
+
+// Helper: get last word before caret in contenteditable
+function getLastWordBeforeCaret(editableDiv) {
+  const selection = window.getSelection();
+  if (!selection.rangeCount) return '';
+  const range = selection.getRangeAt(0);
+  const preCaretRange = range.cloneRange();
+  preCaretRange.collapse(true);
+  preCaretRange.setStart(editableDiv, 0);
+  const text = preCaretRange.toString();
+  const match = text.match(/(\b\w+)$/);
+  return match ? match[1] : '';
+}
+
+// Helper: replace last word before caret in contenteditable
+function replaceLastWordBeforeCaret(editableDiv, suggestion, addSpace = false) {
+  const selection = window.getSelection();
+  if (!selection.rangeCount) return;
+  const range = selection.getRangeAt(0);
+  const preCaretRange = range.cloneRange();
+  preCaretRange.collapse(true);
+  preCaretRange.setStart(editableDiv, 0);
+  const text = preCaretRange.toString();
+  const match = text.match(/(\b\w+)$/);
+  if (!match) return;
+  const lastWord = match[1];
+  // Move start of range to start of last word
+  preCaretRange.setStart(preCaretRange.endContainer, preCaretRange.endOffset - lastWord.length);
+  preCaretRange.deleteContents();
+  // Insert suggestion
+  const node = document.createTextNode(suggestion + (addSpace ? ' ' : ''));
+  preCaretRange.insertNode(node);
+  // Move caret after inserted text
+  range.setStartAfter(node);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+// Update insertSuggestion to support contenteditable
 function insertSuggestion(suggestion, addSpace = false) {
   if (currentInput) {
-    // Replace only the last word
-    const value = currentInput.value;
-    const lastWordMatch = value.match(/(.*?)(\b\w+)?$/);
-    if (lastWordMatch) {
-      const before = value.slice(0, lastWordMatch.index) || '';
-      const words = value.split(/(\s+)/);
-      // Find last word index
-      let lastWordIdx = -1;
-      for (let i = words.length - 1; i >= 0; i--) {
-        if (words[i].trim().length > 0) {
-          lastWordIdx = i;
-          break;
+    if (currentInput instanceof HTMLInputElement || currentInput instanceof HTMLTextAreaElement) {
+      // Replace only the last word
+      const value = currentInput.value;
+      const lastWordMatch = value.match(/(.*?)(\b\w+)?$/);
+      if (lastWordMatch) {
+        const before = value.slice(0, lastWordMatch.index) || '';
+        const words = value.split(/(\s+)/);
+        // Find last word index
+        let lastWordIdx = -1;
+        for (let i = words.length - 1; i >= 0; i--) {
+          if (words[i].trim().length > 0) {
+            lastWordIdx = i;
+            break;
+          }
         }
-      }
-      if (lastWordIdx !== -1) {
-        words[lastWordIdx] = suggestion + (addSpace ? ' ' : '');
-        currentInput.value = words.join('');
+        if (lastWordIdx !== -1) {
+          words[lastWordIdx] = suggestion + (addSpace ? ' ' : '');
+          currentInput.value = words.join('');
+        } else {
+          currentInput.value = suggestion + (addSpace ? ' ' : '');
+        }
       } else {
         currentInput.value = suggestion + (addSpace ? ' ' : '');
       }
-    } else {
-      currentInput.value = suggestion + (addSpace ? ' ' : '');
+      hideSuggestions();
+      currentInput.dispatchEvent(new Event('input', { bubbles: true }));
+    } else if (currentInput.isContentEditable) {
+      replaceLastWordBeforeCaret(currentInput, suggestion, addSpace);
+      hideSuggestions();
     }
-    hideSuggestions();
-    currentInput.dispatchEvent(new Event('input', { bubbles: true }));
   }
 }
 
@@ -194,25 +273,33 @@ function isCursorAtEnd(input) {
   return input.selectionStart === input.value.length && input.selectionEnd === input.value.length;
 }
 
+// Listen for input events on input, textarea, and contenteditable
 document.addEventListener('input', (event) => {
   if (!currentSettings.transliterationEnabled) {
     console.log('[InputTools] Transliteration not enabled');
     return;
   }
   const target = event.target;
-  if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) {
-    console.log('[InputTools] Not a valid input/textarea');
+  const isInput = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+  const isEditable = target.isContentEditable;
+  if (!isInput && !isEditable) {
+    console.log('[InputTools] Not a valid input/textarea/contenteditable');
     return;
   }
-  if (!isCursorAtEnd(target)) {
+  // Only show suggestions if caret is at end
+  if (isInput && !isCursorAtEnd(target)) {
     console.log('[InputTools] Cursor not at end');
     hideSuggestions();
     return;
   }
-  const lang = currentSettings.language || 'ml';
-  const value = target.value;
-  const match = value.match(/(\b\w+)$/);
-  const lastWord = match ? match[1] : '';
+  let lastWord = '';
+  if (isInput) {
+    const value = target.value;
+    const match = value.match(/(\b\w+)$/);
+    lastWord = match ? match[1] : '';
+  } else if (isEditable) {
+    lastWord = getLastWordBeforeCaret(target);
+  }
   console.log('[InputTools] Last word:', lastWord);
   if (!lastWord || /[^\p{L}\p{N}]/u.test(lastWord)) {
     console.log('[InputTools] Last word empty or punctuation');
@@ -226,11 +313,48 @@ document.addEventListener('input', (event) => {
   lastInputValue = lastWord;
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(async () => {
-    console.log('[InputTools] Fetching suggestions for:', lastWord, 'in', lang);
+    console.log('[InputTools] Fetching suggestions for:', lastWord);
+    const lang = currentSettings.language || 'ml';
     const suggestions = await fetchTransliteration(lastWord, lang);
     console.log('[InputTools] Suggestions:', suggestions);
     if (suggestions && suggestions.length > 0) {
-      showSuggestions(target, suggestions);
+      if (isInput) {
+        showSuggestions(target, suggestions);
+      } else if (isEditable) {
+        // Show dropdown near caret
+        if (!suggestionBox) createSuggestionBox();
+        currentInput = target;
+        currentSuggestions = suggestions;
+        suggestionBox.innerHTML = '';
+        highlightedIndex = 0;
+        suggestions.forEach((s, i) => {
+          const item = document.createElement('div');
+          item.textContent = s;
+          item.style.padding = '6px 12px';
+          item.style.cursor = 'pointer';
+          item.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            insertSuggestion(s);
+          });
+          item.addEventListener('mouseenter', () => {
+            highlightedIndex = i;
+            updateSuggestionHighlight();
+          });
+          suggestionBox.appendChild(item);
+        });
+        // Position near caret
+        const coords = getCaretCoordinates(target);
+        suggestionBox.style.left = `${coords.x}px`;
+        suggestionBox.style.top = `${coords.y}px`;
+        suggestionBox.style.width = 'auto';
+        suggestionBox.style.minWidth = '120px';
+        suggestionBox.style.display = 'block';
+        suggestionBox.style.borderRadius = '4px';
+        suggestionBox.style.overflow = 'hidden';
+        suggestionBox.style.maxHeight = '200px';
+        suggestionBox.style.overflowY = 'auto';
+        applyDropdownTheme();
+      }
     } else {
       hideSuggestions();
     }
