@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Input Tools</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div id="popup">
+    <h2>Input Tools</h2>
+    <label for="languageSearch">Search Language:</label>
+    <input type="text" id="languageSearch" placeholder="Type to search..." autocomplete="off" style="width: 100%; margin-bottom: 8px;">
+    <label for="languageSelect">Language:</label>
+    <select id="languageSelect"></select>
+    <div>
+      <label><input type="checkbox" id="transliterationToggle"> Transliteration</label>
+    </div>
+    <div>
+      <label><input type="checkbox" id="keyboardToggle"> Virtual Keyboard</label>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html> 

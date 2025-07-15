@@ -1,0 +1,16 @@
+#popup {
+  min-width: 220px;
+  padding: 12px;
+  font-family: Arial, sans-serif;
+}
+h2 {
+  margin-top: 0;
+  font-size: 1.2em;
+}
+label {
+  display: block;
+  margin: 8px 0 4px;
+}
+select, input[type="checkbox"] {
+  margin-right: 8px;
+} 
