@@ -21,4 +21,4 @@ A Firefox extension for transliteration, virtual keyboard, and handwriting input
 - Content script in `contentScript.js`
 
 ## License
-MIT 
+Mozilla Public License Version 2.0
