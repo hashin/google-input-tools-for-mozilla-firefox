@@ -36,3 +36,33 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
     return Promise.resolve({ suggestions: [] });
   }
 }); 
+
+// Handle keyboard shortcut to toggle transliteration
+browser.commands.onCommand.addListener(async (command) => {
+  if (command === 'toggle-transliteration') {
+    const SETTINGS_KEY = 'inputToolsSettings';
+    const result = await browser.storage.local.get(SETTINGS_KEY);
+    const settings = result[SETTINGS_KEY] || {};
+    const newValue = !settings.transliterationEnabled;
+    const updatedSettings = { ...settings, transliterationEnabled: newValue };
+    await browser.storage.local.set({ [SETTINGS_KEY]: updatedSettings });
+    // Broadcast to all tabs
+    browser.tabs.query({}).then(tabs => {
+      for (const tab of tabs) {
+        if (tab.id) {
+          browser.tabs.sendMessage(tab.id, {
+            type: 'SETTINGS_UPDATE',
+            settings: updatedSettings
+          });
+        }
+      }
+    });
+    // Optionally, show a notification
+    browser.notifications && browser.notifications.create({
+      "type": "basic",
+      "iconUrl": browser.runtime.getURL("icons/icon32.png"),
+      "title": "Input Tools",
+      "message": `Transliteration ${newValue ? 'enabled' : 'disabled'}`
+    });
+  }
+}); 

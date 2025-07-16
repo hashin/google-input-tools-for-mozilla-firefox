@@ -19,6 +19,25 @@ browser.runtime.onMessage.addListener((message, sender) => {
   }
 });
 
+// Keep settings in sync across tabs and browser restarts
+const SETTINGS_KEY = 'inputToolsSettings';
+
+// On content script load, fetch latest settings
+browser.storage.local.get(SETTINGS_KEY).then(result => {
+  if (result[SETTINGS_KEY]) {
+    currentSettings = result[SETTINGS_KEY];
+    console.log('[InputTools] Loaded settings from storage:', currentSettings);
+  }
+});
+
+// Listen for storage changes
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes[SETTINGS_KEY]) {
+    currentSettings = changes[SETTINGS_KEY].newValue;
+    console.log('[InputTools] Settings updated from storage change:', currentSettings);
+  }
+});
+
 // Helper: fetch transliteration suggestions via background script
 async function fetchTransliteration(text, langCode) {
   try {

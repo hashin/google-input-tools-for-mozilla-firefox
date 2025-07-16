@@ -174,4 +174,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     await saveSettings(updatedSettings);
     browser.runtime.sendMessage({ type: 'SETTINGS_UPDATE', settings: updatedSettings });
   });
+
+  // Show correct shortcut for platform
+  const shortcutText = document.getElementById('shortcutText');
+  if (shortcutText) {
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+    shortcutText.innerHTML = `Toggle transliteration: <span style="font-family: monospace;">${isMac ? '⌘+Shift+M' : 'Ctrl+Shift+M'}</span>`;
+  }
 }); 

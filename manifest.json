@@ -44,5 +44,14 @@
     "gecko": {
       "id": "inputtoolsfirefox1@hashin.me"
     }
+  },
+  "commands": {
+    "toggle-transliteration": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+M",
+        "mac": "Command+Shift+M"
+      },
+      "description": "Toggle transliteration on/off"
+    }
   }
 } 
